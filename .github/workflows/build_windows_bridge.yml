@@ -46,6 +46,7 @@ jobs:
           cmake -S . -B build -G "Ninja Multi-Config" -DORCA_TOOLS=ON
 
       - name: Build linux host runtime and WSL rootfs
+        if: false
         shell: bash
         run: |
           cmake --build build --config Release --target pjarczak_bambu_linux_host
