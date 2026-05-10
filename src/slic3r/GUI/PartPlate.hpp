@@ -200,6 +200,7 @@ private:
     void render_icons(bool bottom, bool only_name = false, int hover_id = -1);
     void render_only_numbers(bool bottom);
     void render_plate_name_texture();
+    void invalidate_plate_name_texture();
     void register_raycasters_for_picking(GLCanvas3D& canvas);
     int picking_id_component(int idx) const;
 
@@ -517,6 +518,7 @@ public:
     void set_filament_count(int filament_count);
     void on_filament_added();
     void on_filament_deleted(int filament_count, int filament_id);
+    void detach_plater();
 
     friend class cereal::access;
     friend class UndoRedo::StackImpl;
@@ -698,6 +700,7 @@ public:
 
     //reset partplate to init states
     void reinit();
+    void detach_plater();
 
     //get the plate stride
     double plate_stride_x();

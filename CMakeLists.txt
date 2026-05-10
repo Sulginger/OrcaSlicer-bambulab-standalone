@@ -1,13 +1,9 @@
 if(${CMAKE_VERSION} VERSION_GREATER_EQUAL "4.0")
-    set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.13 CACHE STRING "" FORCE)
 endif()
 
 cmake_minimum_required(VERSION 3.13)
 
-# Verify that your CMake version is exactly 3.5 series or higher on windows
-if ( (MSVC OR WIN32) AND (${CMAKE_VERSION} VERSION_LESS "3.5") )
-    message(FATAL_ERROR "CMake current version ${CMAKE_VERSION} is too old. Minimum required is 3.5.")
-endif()
 
 # The following line used to be in tests/CMakeLists.txt
 # Having it there causes rebuilds of all targets on any CMakeLists.txt change under tests/
@@ -121,10 +117,9 @@ else()
     set(SLIC3R_STATIC_INITIAL 1)
 endif()
 
-option(SLIC3R_STATIC 			"Compile OrcaSlicer with static libraries (Boost, TBB, glew)" ${SLIC3R_STATIC_INITIAL})
+option(SLIC3R_STATIC 			"Compile OrcaSlicer with static libraries (Boost, TBB)" ${SLIC3R_STATIC_INITIAL})
 option(SLIC3R_GUI    			"Compile OrcaSlicer with GUI components (OpenGL, wxWidgets)" 1)
 option(SLIC3R_FHS               "Assume OrcaSlicer is to be installed in a FHS directory structure" 0)
-option(SLIC3R_WX_STABLE         "Build against wxWidgets stable (3.0) as oppsed to dev (3.1) on Linux" 0)
 option(SLIC3R_PROFILE 			"Compile OrcaSlicer with an invasive Shiny profiler" 0)
 option(SLIC3R_PCH               "Use precompiled headers" 1)
 option(SLIC3R_MSVC_COMPILE_PARALLEL "Compile on Visual Studio in parallel" 1)
@@ -377,11 +372,6 @@ endif ()
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
     find_package(PkgConfig REQUIRED)
-
-    if (CMAKE_VERSION VERSION_LESS "3.1")
-        # Workaround for an old CMake, which does not understand CMAKE_CXX_STANDARD.
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-    endif()
 
     # Boost on Raspberry-Pi does not link to pthreads.
     set(THREADS_PREFER_PTHREAD_FLAG ON)
@@ -704,16 +694,6 @@ if(APPLE AND CMAKE_VERSION VERSION_GREATER_EQUAL "4.0")
     set(OPENGL_LIBRARIES "-framework OpenGL" CACHE STRING "OpenGL framework" FORCE)
 endif()
 
-set(GLEW_ROOT "${CMAKE_PREFIX_PATH}")
-message("GLEW_ROOT: ${GLEW_ROOT}")
-# Find glew or use bundled version
-if (SLIC3R_STATIC AND NOT SLIC3R_STATIC_EXCLUDE_GLEW)
-    set(GLEW_USE_STATIC_LIBS ON)
-    set(GLEW_VERBOSE ON)
-endif()
-
-find_package(GLEW REQUIRED)
-
 find_package(glfw3 REQUIRED)
 
 # Find the Cereal serialization library
@@ -728,11 +708,34 @@ endif ()
 # l10n
 set(L10N_DIR "${SLIC3R_RESOURCES_DIR}/i18n")
 set(BBL_L18N_DIR "${CMAKE_CURRENT_SOURCE_DIR}/localization/i18n")
+
+if (WIN32)
+    set(GETTEXT_XGETTEXT_EXECUTABLE "${PROJECT_SOURCE_DIR}/tools/xgettext.exe")
+    set(GETTEXT_MSGMERGE_EXECUTABLE "${PROJECT_SOURCE_DIR}/tools/msgmerge.exe")
+    set(GETTEXT_MSGFMT_EXECUTABLE "${PROJECT_SOURCE_DIR}/tools/msgfmt.exe")
+else ()
+    find_program(GETTEXT_XGETTEXT_EXECUTABLE xgettext)
+    find_program(GETTEXT_MSGMERGE_EXECUTABLE msgmerge)
+    find_program(GETTEXT_MSGFMT_EXECUTABLE msgfmt)
+
+    if (NOT GETTEXT_XGETTEXT_EXECUTABLE)
+        set(GETTEXT_XGETTEXT_EXECUTABLE xgettext)
+    endif ()
+
+    if (NOT GETTEXT_MSGMERGE_EXECUTABLE)
+        set(GETTEXT_MSGMERGE_EXECUTABLE msgmerge)
+    endif ()
+
+    if (NOT GETTEXT_MSGFMT_EXECUTABLE)
+        set(GETTEXT_MSGFMT_EXECUTABLE msgfmt)
+    endif ()
+endif ()
+
 add_custom_target(gettext_make_pot
-    COMMAND xgettext --keyword=L --keyword=_L --keyword=_u8L --keyword=L_CONTEXT:1,2c --keyword=_L_PLURAL:1,2 --add-comments=TRN --from-code=UTF-8 --no-location --debug --boost
+    COMMAND ${GETTEXT_XGETTEXT_EXECUTABLE} --keyword=L --keyword=_L --keyword=_u8L --keyword=L_CONTEXT:1,2c --keyword=_L_PLURAL:1,2 --add-comments=TRN --from-code=UTF-8 --no-location --debug --boost
         -f "${BBL_L18N_DIR}/list.txt"
         -o "${BBL_L18N_DIR}/OrcaSlicer.pot"
-	COMMAND hintsToPot ${SLIC3R_RESOURCES_DIR} ${BBL_L18N_DIR}
+    COMMAND hintsToPot ${SLIC3R_RESOURCES_DIR} ${BBL_L18N_DIR}
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     COMMENT "Generate pot file from strings in the source tree"
 )
@@ -742,12 +745,10 @@ add_custom_target(gettext_merge_po_with_pot
 )
 file(GLOB BBL_L10N_PO_FILES "${BBL_L18N_DIR}/*/OrcaSlicer*.po")
 foreach(po_file ${BBL_L10N_PO_FILES})
-    GET_FILENAME_COMPONENT(po_dir "${po_file}" DIRECTORY)
-    SET(po_new_file "${po_dir}/OrcaSlicer_.po")
     add_custom_command(
         TARGET gettext_merge_po_with_pot PRE_BUILD
-        COMMAND msgmerge -N -o ${po_file} ${po_file} "${BBL_L18N_DIR}/OrcaSlicer.pot"
-        DEPENDS ${po_file}
+        COMMAND ${GETTEXT_MSGMERGE_EXECUTABLE} -N -o "${po_file}" "${po_file}" "${BBL_L18N_DIR}/OrcaSlicer.pot"
+        DEPENDS "${po_file}"
     )
 endforeach()
 add_custom_target(gettext_po_to_mo
@@ -755,17 +756,26 @@ add_custom_target(gettext_po_to_mo
     COMMENT "Generate localization po files (binary) from mo files (texts)"
 )
 file(GLOB L10N_PO_FILES "${BBL_L18N_DIR}/*/OrcaSlicer*.po")
-foreach(po_file ${BBL_L10N_PO_FILES})
-    GET_FILENAME_COMPONENT(SECOND_FOLDER_ABSOLUTE ${po_file} DIRECTORY)
-    string(REGEX REPLACE ".*/(.*)" "\\1" po_dir "${SECOND_FOLDER_ABSOLUTE}" )
-    SET(mo_file "${L10N_DIR}/${po_dir}/OrcaSlicer.mo")
+foreach(po_file ${L10N_PO_FILES})
+    get_filename_component(po_parent_dir "${po_file}" DIRECTORY)
+    get_filename_component(po_dir "${po_parent_dir}" NAME)
+    set(mo_dir "${L10N_DIR}/${po_dir}")
+    set(mo_file "${mo_dir}/OrcaSlicer.mo")
     add_custom_command(
         TARGET gettext_po_to_mo PRE_BUILD
-        COMMAND msgfmt ARGS --check-format -o ${mo_file} ${po_file}
-        #COMMAND msgfmt ARGS --check-compatibility -o ${mo_file} ${po_file}
-        DEPENDS ${po_file}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${mo_dir}"
+        COMMAND ${GETTEXT_MSGFMT_EXECUTABLE} --check-format -o "${mo_file}" "${po_file}"
+        #COMMAND ${GETTEXT_MSGFMT_EXECUTABLE} --check-compatibility -o "${mo_file}" "${po_file}"
+        DEPENDS "${po_file}"
     )
 endforeach()
+
+if (TARGET OrcaSlicer)
+    add_dependencies(OrcaSlicer gettext_po_to_mo)
+endif ()
+if (TARGET OrcaSlicer_app_gui)
+    add_dependencies(OrcaSlicer_app_gui gettext_po_to_mo)
+endif ()
 
 find_package(NLopt 1.4 REQUIRED)
 
@@ -854,6 +864,10 @@ function(orcaslicer_copy_dlls target config postfix output_dlls)
             ${CMAKE_PREFIX_PATH}/bin/occt/TKXDESTEP.dll
             ${CMAKE_PREFIX_PATH}/bin/occt/TKXSBase.dll
             ${CMAKE_PREFIX_PATH}/bin/freetype.dll
+            ${CMAKE_PREFIX_PATH}/bin/avcodec-61.dll
+            ${CMAKE_PREFIX_PATH}/bin/swresample-5.dll
+            ${CMAKE_PREFIX_PATH}/bin/swscale-8.dll
+            ${CMAKE_PREFIX_PATH}/bin/avutil-59.dll
          DESTINATION ${_out_dir})
 
     set(${output_dlls}
@@ -889,10 +903,62 @@ function(orcaslicer_copy_dlls target config postfix output_dlls)
         ${_out_dir}/TKXSBase.dll
 
         ${_out_dir}/freetype.dll
+        ${_out_dir}/avcodec-61.dll
+        ${_out_dir}/swresample-5.dll
+        ${_out_dir}/swscale-8.dll
+        ${_out_dir}/avutil-59.dll
 
         PARENT_SCOPE
     )
 
+endfunction()
+
+function(orcaslicer_copy_sos target config postfix output_sos)
+
+    set(_out_dir "${CMAKE_CURRENT_BINARY_DIR}")
+    message(STATUS "set out_dir to CMAKE_CURRENT_BINARY_DIR: ${_out_dir}")
+
+    if (EXISTS "/usr/lib/aarch64-linux-gnu/libavcodec.so")
+        file(COPY /usr/lib/aarch64-linux-gnu/libavcodec.so
+                  /usr/lib/aarch64-linux-gnu/libavcodec.so.61
+                  /usr/lib/aarch64-linux-gnu/libavutil.so
+                  /usr/lib/aarch64-linux-gnu/libavutil.so.59
+                  /usr/lib/aarch64-linux-gnu/libswscale.so
+                  /usr/lib/aarch64-linux-gnu/libswscale.so.8
+                  /usr/lib/aarch64-linux-gnu/libswresample.so
+                  /usr/lib/aarch64-linux-gnu/libswresample.so.5
+             DESTINATION ${_out_dir})
+    else()
+        file(COPY ${CMAKE_PREFIX_PATH}/lib/libavcodec.so
+                  ${CMAKE_PREFIX_PATH}/lib/libavcodec.so.61
+                  ${CMAKE_PREFIX_PATH}/lib/libavcodec.so.61.3.100
+                  ${CMAKE_PREFIX_PATH}/lib/libavutil.so
+                  ${CMAKE_PREFIX_PATH}/lib/libavutil.so.59
+                  ${CMAKE_PREFIX_PATH}/lib/libavutil.so.59.8.100
+                  ${CMAKE_PREFIX_PATH}/lib/libswscale.so
+                  ${CMAKE_PREFIX_PATH}/lib/libswscale.so.8
+                  ${CMAKE_PREFIX_PATH}/lib/libswscale.so.8.1.100
+                  ${CMAKE_PREFIX_PATH}/lib/libswresample.so
+                  ${CMAKE_PREFIX_PATH}/lib/libswresample.so.5
+                  ${CMAKE_PREFIX_PATH}/lib/libswresample.so.5.1.100
+             DESTINATION ${_out_dir})
+    endif()
+
+    set(${output_sos}
+        ${_out_dir}/libavcodec.so
+        ${_out_dir}/libavcodec.so.61
+        ${_out_dir}/libavcodec.so.61.3.100
+        ${_out_dir}/libavutil.so
+        ${_out_dir}/libavutil.so.59
+        ${_out_dir}/libavutil.so.59.8.100
+        ${_out_dir}/libswscale.so
+        ${_out_dir}/libswscale.so.8
+        ${_out_dir}/libswscale.so.8.1.100
+        ${_out_dir}/libswresample.so
+        ${_out_dir}/libswresample.so.5
+        ${_out_dir}/libswresample.so.5.1.100
+        PARENT_SCOPE
+    )
 endfunction()
 
 
@@ -929,7 +995,7 @@ elseif (SLIC3R_FHS)
     install(DIRECTORY ${SLIC3R_RESOURCES_DIR}/ DESTINATION ${SLIC3R_FHS_RESOURCES}
         PATTERN "*/udev" EXCLUDE
     )
-    install(FILES src/dev-utils/platform/unix/OrcaSlicer.desktop DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications)
+    install(FILES src/dev-utils/platform/unix/com.orcaslicer.OrcaSlicer.desktop DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications)
     foreach(SIZE 32 128 192)
         install(FILES ${SLIC3R_RESOURCES_DIR}/images/OrcaSlicer_${SIZE}px.png
             DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/${SIZE}x${SIZE}/apps RENAME OrcaSlicer.png
@@ -938,8 +1004,22 @@ elseif (SLIC3R_FHS)
 elseif (CMAKE_MACOSX_BUNDLE)
     # install(DIRECTORY "${SLIC3R_RESOURCES_DIR}/" DESTINATION "${CMAKE_INSTALL_PREFIX}/OrcaSlicer.app/Contents/resources")
 else ()
-    install(FILES src/dev-utils/platform/unix/OrcaSlicer.desktop DESTINATION ${CMAKE_INSTALL_PREFIX}/resources/applications)
+    install(FILES src/dev-utils/platform/unix/com.orcaslicer.OrcaSlicer.desktop DESTINATION ${CMAKE_INSTALL_PREFIX}/resources/applications)
     install(DIRECTORY "${SLIC3R_RESOURCES_DIR}/" DESTINATION "${CMAKE_INSTALL_PREFIX}/resources")
+endif ()
+
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT FLATPAK)
+    set(LIBRARY_FILES
+        ${LIBDIR_BIN}/libavcodec.so.61
+        ${LIBDIR_BIN}/libavcodec.so.61.3.100
+        ${LIBDIR_BIN}/libavutil.so.59
+        ${LIBDIR_BIN}/libavutil.so.59.8.100
+        ${LIBDIR_BIN}/libswresample.so.5
+        ${LIBDIR_BIN}/libswresample.so.5.1.100
+        ${LIBDIR_BIN}/libswscale.so.8
+        ${LIBDIR_BIN}/libswscale.so.8.1.100
+    )
+    install(FILES ${LIBRARY_FILES} DESTINATION "${CMAKE_INSTALL_PREFIX}/bin")
 endif ()
 
 install(FILES ${CMAKE_SOURCE_DIR}/LICENSE.txt DESTINATION ".")

@@ -166,11 +166,18 @@ function(orcaslicer_add_cmake_project projectname)
         endif ()
     endif ()
 
-    set(_gen "")
-    set(_build_j "-j${NPROC}")
     if (MSVC)
-        set(_gen CMAKE_GENERATOR "${DEP_MSVC_GEN}" CMAKE_GENERATOR_PLATFORM "${DEP_PLATFORM}")
-        set(_build_j "/m")
+      set(_gen CMAKE_GENERATOR "${DEP_MSVC_GEN}" CMAKE_GENERATOR_PLATFORM "${DEP_PLATFORM}")
+    else()
+      set(_gen "")
+    endif()
+
+    if ($ENV{CMAKE_BUILD_PARALLEL_LEVEL})
+      set(_build_j "")  # assume environment will control --build parallel setting
+    elseif(MSVC)
+      set(_build_j "/m")
+    else()
+      set(_build_j "-j${NPROC}")
     endif ()
 
 if (NOT IS_CROSS_COMPILE OR NOT APPLE)
@@ -382,6 +389,12 @@ if(NOT FREETYPE_FOUND)
     set(FREETYPE_PKG "dep_FREETYPE") 
 endif()
 
+set(FFMPEG_PKG "")
+if (MSVC OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    include(FFMPEG/FFMPEG.cmake)
+    set(FFMPEG_PKG "dep_FFMPEG")
+endif()
+
 execute_process(
     COMMAND ${GIT_EXECUTABLE} rev-parse --is-inside-work-tree
     RESULT_VARIABLE REV_PARSE_RESULT
@@ -415,6 +428,7 @@ set(_dep_list
     dep_GLFW
     dep_OCCT
     ${FREETYPE_PKG}
+    ${FFMPEG_PKG}
     ${PNG_PKG}
     ${ZLIB_PKG}
     ${EXPAT_PKG}
