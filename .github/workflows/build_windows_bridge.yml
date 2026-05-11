@@ -118,12 +118,14 @@ jobs:
           echo "date=$date" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
 
       - name: Download linux host runtime artifact
+        if: false
         uses: actions/download-artifact@v8
         with:
           name: linux_host_runtime_${{ github.sha }}
           path: ${{ github.workspace }}/linux_host_runtime_artifact
 
       - name: Extract linux host runtime artifact on Windows
+        if: false
         working-directory: ${{ github.workspace }}
         shell: pwsh
         run: |
@@ -131,12 +133,14 @@ jobs:
           tar -xzf "$env:GITHUB_WORKSPACE\linux_host_runtime_artifact\linux_host_runtime_${{ github.sha }}.tar.gz" -C "$env:GITHUB_WORKSPACE\tools\pjarczak_bambu_linux_host\runtime"
 
       - name: Download WSL rootfs artifact
+        if: false
         uses: actions/download-artifact@v8
         with:
           name: wsl_rootfs_${{ github.sha }}
           path: ${{ github.workspace }}/wsl_rootfs_artifact
 
       - name: Extract WSL rootfs artifact on Windows
+        if: false
         working-directory: ${{ github.workspace }}
         shell: pwsh
         run: |
