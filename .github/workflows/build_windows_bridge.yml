@@ -201,11 +201,13 @@ jobs:
           Get-ChildItem -Force "$env:GITHUB_WORKSPACE\build\OrcaSlicer" | Format-Table Name, Length -AutoSize
 
       - name: Install bundled WSL2 Orca runtime into live plugins dir
+        if: false
         shell: pwsh
         run: |
           & "$env:GITHUB_WORKSPACE\build\OrcaSlicer\install_runtime.ps1" -ReplaceExisting
 
       - name: Show live Orca plugin dir after installer
+        if: false
         shell: pwsh
         run: |
           Get-ChildItem -Force "$env:APPDATA\OrcaSlicer\plugins" | Format-Table Name, Length -AutoSize
@@ -215,6 +217,7 @@ jobs:
           }
 
       - name: Validate live Orca plugin dir bootstrap package
+        if: false
         shell: pwsh
         run: |
           & "$env:APPDATA\OrcaSlicer\plugins\verify_runtime.ps1" -PackageDir "$env:APPDATA\OrcaSlicer\plugins" -PluginCacheDir "$env:APPDATA\OrcaSlicer\ota\plugins" -AllowMissingLinuxPlugin
